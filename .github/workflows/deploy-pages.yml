@@ -1,0 +1,44 @@
+# main에 소스만 push하면 사이트는 자동 빌드·배포되지 않습니다.
+# Pages로 실제 주소(https://YOURNAME.github.io/REPO/)에 올려야 브라우저에서 동작합니다.
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      # 저장소 이름 서브패스 (/REPO/). USERNAME.github.io 저장소만 쓰면 base는 '/' 필요 → 아래 줄을 수정
+      - run: npm run build
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
