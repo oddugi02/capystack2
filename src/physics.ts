@@ -27,8 +27,8 @@ export type StackBody = Matter.Body & {
   plugin: {
     stackItem?: StackItemDef;
     placed?: boolean;
-    /** 이번 층 스폰·판정 폭 */
-    spawnWidth?: number;
+    /** 이번 층 스폰·판정 높이 (bounds 미갱신 시 그리기/낙하에 사용) */
+    spawnHeight?: number;
     /** 안착 후 남은 가로 범위 */
     stackSpan?: { left: number; right: number };
   };
@@ -265,7 +265,7 @@ export class PhysicsWorld {
       return {
         left: z.left + pad,
         right: z.right - pad,
-        topY: this.layout.stackBaseY,
+        topY: z.firstLandingY ?? this.layout.stackBaseY,
       };
     }
     const top = placed[placed.length - 1];
@@ -274,7 +274,8 @@ export class PhysicsWorld {
   }
 
   getSpawnWidth(): number {
-    return layerWidth(this.getSupportLayer());
+    const w = layerWidth(this.getSupportLayer());
+    return Math.min(this.width * 0.92, Math.max(88, w));
   }
 
   getLayerHeight(item: StackItemDef): number {
@@ -298,6 +299,7 @@ export class PhysicsWorld {
       stackItem: item,
       placed: false,
       spawnWidth: width,
+      spawnHeight: height,
     };
     if (isStatic) Body.setStatic(body, true);
     return body;
@@ -305,13 +307,17 @@ export class PhysicsWorld {
 
   getLandingY(body: StackBody): number {
     const support = this.getSupportLayer();
-    const h = body.bounds.max.y - body.bounds.min.y;
+    const bh = body.bounds.max.y - body.bounds.min.y;
+    const h =
+      bh > 2 ? bh : Math.max(body.plugin.spawnHeight ?? 0, this.getLayerHeight(body.plugin.stackItem!));
     return support.topY - h * 0.5;
   }
 
   placeStackPiece(body: StackBody) {
     const dropW = body.plugin.spawnWidth ?? body.bounds.max.x - body.bounds.min.x;
-    const h = body.bounds.max.y - body.bounds.min.y;
+    const bh = body.bounds.max.y - body.bounds.min.y;
+    const h =
+      bh > 2 ? bh : Math.max(body.plugin.spawnHeight ?? 0, this.getLayerHeight(body.plugin.stackItem!));
     const support = this.getSupportLayer();
     const placement = computePlacement(body.position.x, dropW, h, support);
 
@@ -353,9 +359,11 @@ export class PhysicsWorld {
       Body.setPosition(b, { x: b.position.x, y: b.position.y + dy });
     }
     this.layout.stackBaseY += dy;
+    const z = this.layout.stackZone;
     this.layout.stackZone = {
-      ...this.layout.stackZone,
-      surfaceY: this.layout.stackZone.surfaceY + dy,
+      ...z,
+      surfaceY: z.surfaceY + dy,
+      firstLandingY: z.firstLandingY !== undefined ? z.firstLandingY + dy : undefined,
     };
   }
 

@@ -37,8 +37,15 @@ export function renderShareCard(
     if (layers.scene) {
       ctx.drawImage(layers.scene, x, y, dw, dh);
     }
+    /** 물체만 약 30% 축소 — transform 대신 목적지 rect로 비율유지 스케일(일부 브라우저에서 레이어 사라짐 방지) */
+    const itemScale = 0.7;
     if (layers.physics) {
-      ctx.drawImage(layers.physics, x, y, dw, dh);
+      const ph = layers.physics;
+      const dws = dw * itemScale;
+      const dhs = dh * itemScale;
+      const dx = x + (dw - dws) * 0.5;
+      const dy = y + (dh - dhs) * 0.1;
+      ctx.drawImage(ph, 0, 0, ph.width, ph.height, dx, dy, dws, dhs);
     }
   }
 
@@ -61,5 +68,5 @@ export function renderShareCard(
 
   ctx.font = '16px Jua, sans-serif';
   ctx.fillStyle = '#b8956a';
-  ctx.fillText('나도 도전해봐 🦫', w / 2, h * 0.91);
+  ctx.fillText('너도 도전해봐 🦫', w / 2, h * 0.91);
 }

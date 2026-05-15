@@ -69,6 +69,8 @@ export class CapybaraScene {
   private lastLayout: ViewLayout | null = null;
   private stackZone: StackZone = { left: 0, right: 0, surfaceY: 0 };
   private scrollScreenY = 0;
+  /** 텍스처 로드 후 등으로 3D 스택 존이 바뀌었을 때 물리를 다시 맞춤 */
+  onLayoutChanged?: () => void;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -185,10 +187,18 @@ export class CapybaraScene {
     const bodyRight = Math.max(...xs);
     const pad = (bodyRight - bodyLeft) * 0.08;
 
+    const minRy = Math.min(...surfaceYs);
+    const maxRy = Math.max(...surfaceYs);
+    /** 능선 꼭대기에서 살짝 아래로 — 머리·목 위 가장자리에 걸치게 */
+    const nudge = Math.min(14, this.screenH * 0.018);
+    const proposed = minRy + nudge;
+    const firstLandingY = Math.min(proposed, maxRy - 8);
+
     this.stackZone = {
       left: bodyLeft - pad,
       right: bodyRight + pad,
-      surfaceY: Math.max(...surfaceYs),
+      surfaceY: maxRy,
+      firstLandingY,
     };
   }
 
@@ -258,6 +268,8 @@ export class CapybaraScene {
     this.shadow.position.set(this.center.x, shadowY, -0.05);
     const shadowW = this.box.max.x - this.box.min.x;
     this.shadow.scale.set(shadowW * 0.42, shadowW * 0.12, 1);
+
+    this.onLayoutChanged?.();
   }
 
   getStackPlatform(_layout: ViewLayout): PlatformSegment[] {

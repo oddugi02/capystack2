@@ -24,12 +24,17 @@ export type PlatformSegment = {
   angle?: number;
 };
 
-/** 카피바라 머리~등 쌓기 허용 구간 (화면 px) */
+/** 카피바라 머리~등 쌓기 허용 구간 (화면 px, Y는 아래로 증가) */
 export interface StackZone {
   left: number;
   right: number;
-  /** 등 바닥(파인) — 화면 Y, 아래로 갈수록 큼 */
+  /** 등 바닥(파인·전체 높이 기준점) — 화면 Y */
   surfaceY: number;
+  /**
+   * 첫 번째 블록이 얹히는 높이(지지면 상단).
+   * 능선 상단(머리~목 위 경계 근처) — 둘째 블록부터는 맨 위 층 높이를 따름.
+   */
+  firstLandingY?: number;
 }
 
 export function computeLayout(width: number, height: number): ViewLayout {
@@ -74,9 +79,12 @@ export function fallbackStackZone(w: number, v: ViewLayout): StackZone {
   const cx = w * v.capyCenterX;
   const halfBody = w * 0.2;
   const pad = w * 0.035;
+  const dip = v.backY + 8;
+  const crest = dip - Math.max(v.height * 0.045, 30);
   return {
     left: cx - halfBody - pad,
     right: cx + halfBody + pad,
-    surfaceY: v.backY + 8,
+    surfaceY: dip,
+    firstLandingY: Math.min(crest, dip - 14),
   };
 }

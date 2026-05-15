@@ -1,6 +1,6 @@
-import { buildDailySequence, dailyChallengeLabel } from './daily';
-import type { StackItemDef } from './types';
-import type { GamePhase, GameScore } from './types';
+import { dailyChallengeLabel } from './daily';
+import { pickRandomStackItem } from './items';
+import type { GamePhase, GameScore, StackItemDef } from './types';
 import { CapybaraScene } from './capybara3d';
 import { computeLayout } from './layout';
 import { getGameSize } from './viewport';
@@ -38,8 +38,6 @@ export class Game {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private phase: GamePhase = 'intro';
-  private sequence: StackItemDef[] = [];
-  private seqIndex = 0;
   private previewBody: StackBody | null = null;
   private fallingBody: StackBody | null = null;
   private fallTargetY = 0;
@@ -49,6 +47,8 @@ export class Game {
   private raf = 0;
   private perfectStreak = 0;
   private audioCtx: AudioContext | null = null;
+  /** 현재 노리고 있는 다음 조각(리사이즈·씬 동기에는 유지, 착지만 새로 랜덤) */
+  private pendingPreviewItem: StackItemDef | null = null;
 
   constructor(
     sceneCanvas: HTMLCanvasElement,
@@ -60,11 +60,26 @@ export class Game {
     this.scene3d = new CapybaraScene(sceneCanvas);
     this.physics = new PhysicsWorld();
 
+    this.scene3d.onLayoutChanged = () => this.syncSceneLayoutToPhysics();
+
     dom.introDaily.textContent = dailyChallengeLabel();
     this.bindEvents();
     this.resize();
     window.addEventListener('resize', () => this.resize());
     this.loop();
+  }
+
+  /** 카피 텍스처 로드 후 스택 존 변경 → 물리·미리보기 재동기화 */
+  private syncSceneLayoutToPhysics() {
+    const z = this.scene3d.getStackZone();
+    if (z.right <= z.left + 8) return;
+    const { width: w, height: h } = getGameSize();
+    const layout = computeLayout(w, h);
+    const platform = this.scene3d.getStackPlatform(layout);
+    this.physics.resize(w, h, platform, z);
+    if (this.phase === 'aiming') {
+      this.spawnPreview(false);
+    }
   }
 
   private bindEvents() {
@@ -120,7 +135,7 @@ export class Game {
     this.physics.resize(w, h, platform, stackZone);
 
     if (this.phase === 'aiming') {
-      this.spawnPreview();
+      this.spawnPreview(false);
     }
   }
 
@@ -140,8 +155,6 @@ export class Game {
     const stackZone = this.scene3d.getStackZone();
     this.physics.resize(w, h, platform, stackZone);
 
-    this.sequence = buildDailySequence();
-    this.seqIndex = 0;
     this.score = { floors: 0, heightCm: 0 };
     this.perfectStreak = 0;
     this.fallingBody = null;
@@ -149,7 +162,7 @@ export class Game {
     updateHud(this.score, this.records);
 
     this.phase = 'aiming';
-    this.spawnPreview();
+    this.spawnPreview(true);
     setDropEnabled(true);
     showStatus('좌우로 움직일 때 탭!');
   }
@@ -160,17 +173,29 @@ export class Game {
 
   private previewDropY(body: StackBody): number {
     const support = this.physics.getSupportLayer();
-    const h = body.bounds.max.y - body.bounds.min.y;
+    const bh = body.bounds.max.y - body.bounds.min.y;
+    const h =
+      bh > 2
+        ? bh
+        : Math.max(
+            body.plugin.spawnHeight ?? 0,
+            this.physics.getLayerHeight(body.plugin.stackItem!),
+          );
     return Math.max(this.physics.layout.dropY, support.topY - h - 28);
   }
 
-  private spawnPreview() {
+  /** @param reroll 새 랜덤 조각(시작·착지만 true). 리사이즈·씬 동기에서는 false 로 태그·조각 고정 */
+  private spawnPreview(reroll: boolean) {
+    if (reroll || !this.pendingPreviewItem) {
+      this.pendingPreviewItem = pickRandomStackItem();
+    }
+
+    const item = this.pendingPreviewItem;
     if (this.previewBody) {
       this.physics.removeBody(this.previewBody);
       this.previewBody = null;
     }
 
-    const item = this.sequence[this.seqIndex % this.sequence.length];
     const zone = this.physics.layout.stackZone;
     const spawnW = this.physics.getSpawnWidth();
     const spawnH = this.physics.getLayerHeight(item);
@@ -284,9 +309,8 @@ export class Game {
       this.playTone(440, 0.06, 0.08);
     }
 
-    this.seqIndex++;
     this.phase = 'aiming';
-    this.spawnPreview();
+    this.spawnPreview(true);
     setDropEnabled(true);
   }
 

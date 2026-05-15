@@ -103,3 +103,9 @@ export const ITEM_POOL: StackItemDef[] = [
 export function getItemById(id: string): StackItemDef {
   return ITEM_POOL.find((i) => i.id === id) ?? ITEM_POOL[0];
 }
+
+/** 다음에 떨어질 물건 — 게임마다·층마다 완전 무작위 */
+export function pickRandomStackItem(): StackItemDef {
+  const i = Math.floor(Math.random() * ITEM_POOL.length);
+  return ITEM_POOL[i];
+}

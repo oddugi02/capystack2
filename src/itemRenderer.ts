@@ -12,26 +12,39 @@ function visualDrawSize(body: StackBody): { w: number; h: number } {
     return { w: Math.max(bw, 8), h: Math.max(bh, 8) };
   }
 
-  if (bw < 2 || bh < 2 || !Number.isFinite(bw)) {
+  /** Engine.step 미실행 등으로 bounds 비정상일 때 스폰 치수 사용 */
+  if (bw < 2 || !Number.isFinite(bw)) {
     bw = Math.max(body.plugin.spawnWidth ?? item.width, item.width);
-    bh = Math.max(28, Math.min(44, item.height));
+  }
+  if (bh < 2 || !Number.isFinite(bh)) {
+    const sh =
+      body.plugin.spawnHeight ??
+      Math.max(28, Math.min(44, item.height));
+    bh = Math.max(sh, item.height * 0.5);
   }
 
   const iw = item.width;
   const ih = Math.max(item.height, 1);
   const scale = Math.min(bw / iw, bh / ih);
+  let vw = iw * scale;
+  let vh = ih * scale;
+  if (!Number.isFinite(vw) || vw < 6) vw = Math.min(iw, Math.max(body.plugin.spawnWidth ?? iw, bw));
+  if (!Number.isFinite(vh) || vh < 6)
+    vh = Math.min(ih, body.plugin.spawnHeight ?? Math.max(28, ih));
   return {
-    w: Math.max(iw * scale, 6),
-    h: Math.max(ih * scale, 6),
+    w: Math.max(Math.min(vw, bw || iw), 6),
+    h: Math.max(Math.min(vh, bh || ih), 6),
   };
 }
 
 /** 흰 배경 위 연한색 아이템이 사라져 보이지 않도록 통일 접지 그림자 */
 function drawGroundShadow(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const rw = Math.max(w * 0.5 + 2, 4);
+  const rh = Math.max(h * 0.22, 3);
   ctx.save();
-  ctx.fillStyle = 'rgba(26, 26, 26, 0.11)';
+  ctx.fillStyle = 'rgba(26, 26, 26, 0.18)';
   ctx.beginPath();
-  ctx.ellipse(1, h * 0.42, w * 0.5 + 2, Math.max(h * 0.2, 5), 0, 0, Math.PI * 2);
+  ctx.ellipse(1, Math.min(h * 0.42, h * 0.5), rw, rh, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
