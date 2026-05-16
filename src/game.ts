@@ -2,7 +2,7 @@ import { dailyChallengeLabel } from './daily';
 import { pickRandomStackItem } from './items';
 import type { GamePhase, GameScore, StackItemDef } from './types';
 import { CapybaraScene } from './capybara3d';
-import { computeLayout } from './layout';
+import { computeLayout, fallbackStackZone } from './layout';
 import { getGameSize } from './viewport';
 import Matter from 'matter-js';
 import {
@@ -70,13 +70,17 @@ export class Game {
   }
 
   /** 카피 텍스처 로드 후 스택 존 변경 → 물리·미리보기 재동기화 */
-  private syncSceneLayoutToPhysics() {
+  private resolveStackZone(w: number, h: number) {
+    const layout = computeLayout(w, h);
     const z = this.scene3d.getStackZone();
-    if (z.right <= z.left + 8) return;
+    return z.right > z.left + 8 ? z : fallbackStackZone(w, layout);
+  }
+
+  private syncSceneLayoutToPhysics() {
     const { width: w, height: h } = getGameSize();
     const layout = computeLayout(w, h);
     const platform = this.scene3d.getStackPlatform(layout);
-    this.physics.resize(w, h, platform, z);
+    this.physics.resize(w, h, platform, this.resolveStackZone(w, h));
     if (this.phase === 'aiming') {
       this.spawnPreview(false);
     }
@@ -131,8 +135,7 @@ export class Game {
     this.scene3d.resize(w, h);
     this.scene3d.setLayout(layout);
     const platform = this.scene3d.getStackPlatform(layout);
-    const stackZone = this.scene3d.getStackZone();
-    this.physics.resize(w, h, platform, stackZone);
+    this.physics.resize(w, h, platform, this.resolveStackZone(w, h));
 
     if (this.phase === 'aiming') {
       this.spawnPreview(false);
@@ -152,8 +155,7 @@ export class Game {
     const layout = computeLayout(w, h);
     this.scene3d.setLayout(layout);
     const platform = this.scene3d.getStackPlatform(layout);
-    const stackZone = this.scene3d.getStackZone();
-    this.physics.resize(w, h, platform, stackZone);
+    this.physics.resize(w, h, platform, this.resolveStackZone(w, h));
 
     this.score = { floors: 0, heightCm: 0 };
     this.perfectStreak = 0;
@@ -181,7 +183,7 @@ export class Game {
             body.plugin.spawnHeight ?? 0,
             this.physics.getLayerHeight(body.plugin.stackItem!),
           );
-    return Math.max(this.physics.layout.dropY, support.topY - h - 28);
+    return Math.max(this.physics.layout.dropY, support.topY - h - 4);
   }
 
   /** @param reroll 새 랜덤 조각(시작·착지만 true). 리사이즈·씬 동기에서는 false 로 태그·조각 고정 */
@@ -371,8 +373,13 @@ export class Game {
   }
 
   private draw() {
-    const { width, height } = this.physics;
-    this.ctx.clearRect(0, 0, width, height);
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    const dpr = Math.min(window.devicePixelRatio, 2);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.restore();
 
     for (const b of this.physics.stackBodies) {
       if (b === this.fallingBody) continue;
@@ -389,7 +396,7 @@ export class Game {
         this.ctx.beginPath();
         const support = this.physics.getSupportLayer();
         const dropY = active.position.y;
-        const guideEnd = Math.min(support.topY - 6, this.physics.getStackTopY() - 8);
+        const guideEnd = Math.min(support.topY - 2, this.physics.getStackTopY() - 2);
         this.ctx.moveTo(active.position.x, dropY + 16);
         this.ctx.lineTo(active.position.x, guideEnd);
         this.ctx.stroke();

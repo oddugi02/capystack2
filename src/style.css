@@ -76,8 +76,6 @@ body::before {
 #physics-canvas {
   z-index: 2;
   pointer-events: auto;
-  /* 씬(흰 배경)과 합성될 때 투명 위에 또 흰이 겹치면 물체가 묻히는 현상 줄임 */
-  isolation: isolate;
 }
 
 .hud {

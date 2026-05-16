@@ -5,8 +5,10 @@ export interface StackLayer {
   topY: number;
 }
 
-export const MIN_OVERLAP_PX = 14;
+export const MIN_OVERLAP_PX = 10;
 export const PERFECT_ALIGN_PX = 10;
+/** 층 접합 시 1px 겹침 — 안티앨리어싱·서브픽셀 빈틈 방지 */
+export const STACK_CONTACT_OVERLAP = 1;
 
 export function layerWidth(layer: StackLayer): number {
   return layer.right - layer.left;
@@ -48,7 +50,8 @@ export function computePlacement(
   if (width < MIN_OVERLAP_PX) return { ok: false };
 
   const centerX = (left + right) / 2;
-  const centerY = support.topY - pieceHeight * 0.5;
+  const centerY =
+    support.topY - pieceHeight * 0.5 + STACK_CONTACT_OVERLAP;
   const supportCenter = (support.left + support.right) * 0.5;
   const perfect = Math.abs(centerX - supportCenter) <= PERFECT_ALIGN_PX;
   const overhang = dropWidth - width;

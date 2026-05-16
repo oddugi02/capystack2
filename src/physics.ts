@@ -8,9 +8,15 @@ import {
   type StackZone,
   type ViewLayout,
 } from './layout';
+
+/** Matter 엔진 미스텝 시 bounds·vertices 동기화 */
+function refreshStackBodyBounds(body: StackBody) {
+  Body.set(body, body);
+}
 import {
   computePlacement,
   layerWidth,
+  STACK_CONTACT_OVERLAP,
   type StackLayer,
 } from './stackRules';
 import type { StackItemDef } from './types';
@@ -134,7 +140,10 @@ export function layoutForSize(
 ): PlatformLayout {
   const v = computeLayout(w, h);
   const segs = segments ?? fallbackPlatformSegments(w, v);
-  const zone = stackZone ?? fallbackStackZone(w, v);
+  let zone = stackZone ?? fallbackStackZone(w, v);
+  if (zone.right <= zone.left + 8) {
+    zone = fallbackStackZone(w, v);
+  }
   const segH = 18;
   const surfaceTop = (s: PlatformSegment) => s.y - (s.h ?? segH) * 0.5;
   const floorY = Math.max(...segs.map(surfaceTop), zone.surfaceY);
@@ -262,10 +271,12 @@ export class PhysicsWorld {
     if (placed.length === 0) {
       const z = this.layout.stackZone;
       const pad = layerWidth({ left: z.left, right: z.right, topY: 0 }) * 0.06;
+      const crest =
+        z.firstLandingY ?? z.landmarks?.dipCrestY ?? this.layout.stackBaseY;
       return {
         left: z.left + pad,
         right: z.right - pad,
-        topY: z.firstLandingY ?? this.layout.stackBaseY,
+        topY: crest,
       };
     }
     const top = placed[placed.length - 1];
@@ -275,11 +286,11 @@ export class PhysicsWorld {
 
   getSpawnWidth(): number {
     const w = layerWidth(this.getSupportLayer());
-    return Math.min(this.width * 0.92, Math.max(88, w));
+    return Math.min(this.width * 0.92, Math.max(62, w));
   }
 
   getLayerHeight(item: StackItemDef): number {
-    return Math.max(28, Math.min(44, item.height));
+    return Math.max(22, Math.min(43, item.height));
   }
 
   /** 탑쌓기용 — 직사각형 충돌 + 아이템 비주얼 */
@@ -293,7 +304,7 @@ export class PhysicsWorld {
   ): StackBody {
     const body = Bodies.rectangle(x, y, width, height, {
       ...bodyOpts(item),
-      chamfer: { radius: 6 },
+      chamfer: { radius: 2 },
     }) as StackBody;
     body.plugin = {
       stackItem: item,
@@ -302,22 +313,28 @@ export class PhysicsWorld {
       spawnHeight: height,
     };
     if (isStatic) Body.setStatic(body, true);
+    refreshStackBodyBounds(body);
     return body;
+  }
+
+  private pieceHeight(body: StackBody): number {
+    const bh = body.bounds.max.y - body.bounds.min.y;
+    if (bh > 2) return bh;
+    return Math.max(
+      body.plugin.spawnHeight ?? 0,
+      this.getLayerHeight(body.plugin.stackItem!),
+    );
   }
 
   getLandingY(body: StackBody): number {
     const support = this.getSupportLayer();
-    const bh = body.bounds.max.y - body.bounds.min.y;
-    const h =
-      bh > 2 ? bh : Math.max(body.plugin.spawnHeight ?? 0, this.getLayerHeight(body.plugin.stackItem!));
-    return support.topY - h * 0.5;
+    const h = this.pieceHeight(body);
+    return support.topY - h * 0.5 + STACK_CONTACT_OVERLAP;
   }
 
   placeStackPiece(body: StackBody) {
     const dropW = body.plugin.spawnWidth ?? body.bounds.max.x - body.bounds.min.x;
-    const bh = body.bounds.max.y - body.bounds.min.y;
-    const h =
-      bh > 2 ? bh : Math.max(body.plugin.spawnHeight ?? 0, this.getLayerHeight(body.plugin.stackItem!));
+    const h = this.pieceHeight(body);
     const support = this.getSupportLayer();
     const placement = computePlacement(body.position.x, dropW, h, support);
 
@@ -332,6 +349,7 @@ export class PhysicsWorld {
     Body.setVelocity(body, { x: 0, y: 0 });
     Body.setAngularVelocity(body, 0);
     Body.setStatic(body, true);
+    refreshStackBodyBounds(body);
 
     body.plugin.placed = true;
     body.plugin.spawnWidth = dropW;
@@ -360,10 +378,19 @@ export class PhysicsWorld {
     }
     this.layout.stackBaseY += dy;
     const z = this.layout.stackZone;
+    const lm = z.landmarks;
     this.layout.stackZone = {
       ...z,
       surfaceY: z.surfaceY + dy,
-      firstLandingY: z.firstLandingY !== undefined ? z.firstLandingY + dy : undefined,
+      firstLandingY:
+        z.firstLandingY !== undefined ? z.firstLandingY + dy : lm?.dipCrestY,
+      landmarks: lm
+        ? {
+            headTopY: lm.headTopY + dy,
+            dipCrestY: lm.dipCrestY + dy,
+            backTopY: lm.backTopY + dy,
+          }
+        : undefined,
     };
   }
 
@@ -391,6 +418,8 @@ export class PhysicsWorld {
 
   addToWorld(body: StackBody) {
     World.add(this.world, body);
+    Engine.update(this.engine, 1000 / 60);
+    refreshStackBodyBounds(body);
   }
 }
 

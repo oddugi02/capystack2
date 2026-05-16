@@ -24,17 +24,25 @@ export type PlatformSegment = {
   angle?: number;
 };
 
+/** 카피바라 머리~등 기준선 (화면 px, Y는 아래로 증가) */
+export interface StackLandmarks {
+  /** 머리 윗경계선 */
+  headTopY: number;
+  /** 머리·등 연결부 파인 윗경계선 (목 융기) */
+  dipCrestY: number;
+  /** 등 윗경계선 (어깨·등 시작) */
+  backTopY: number;
+}
+
 /** 카피바라 머리~등 쌓기 허용 구간 (화면 px, Y는 아래로 증가) */
 export interface StackZone {
   left: number;
   right: number;
-  /** 등 바닥(파인·전체 높이 기준점) — 화면 Y */
+  /** 등 안장 바닥(파인 최하단) — 높이·점수 기준 */
   surfaceY: number;
-  /**
-   * 첫 번째 블록이 얹히는 높이(지지면 상단).
-   * 능선 상단(머리~목 위 경계 근처) — 둘째 블록부터는 맨 위 층 높이를 따름.
-   */
+  /** 첫 조각 밑면이 닿는 높이 = dipCrestY */
   firstLandingY?: number;
+  landmarks?: StackLandmarks;
 }
 
 export function computeLayout(width: number, height: number): ViewLayout {
@@ -79,12 +87,15 @@ export function fallbackStackZone(w: number, v: ViewLayout): StackZone {
   const cx = w * v.capyCenterX;
   const halfBody = w * 0.2;
   const pad = w * 0.035;
-  const dip = v.backY + 8;
-  const crest = dip - Math.max(v.height * 0.045, 30);
+  const headTopY = v.backY - Math.max(v.height * 0.11, 52);
+  const dipCrestY = v.backY - Math.max(v.height * 0.045, 28);
+  const backTopY = v.backY - Math.max(v.height * 0.028, 16);
+  const saddleFloorY = v.backY + 8;
   return {
     left: cx - halfBody - pad,
     right: cx + halfBody + pad,
-    surfaceY: dip,
-    firstLandingY: Math.min(crest, dip - 14),
+    surfaceY: saddleFloorY,
+    firstLandingY: dipCrestY,
+    landmarks: { headTopY, dipCrestY, backTopY },
   };
 }

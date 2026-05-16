@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { ViewLayout, PlatformSegment, StackZone } from './layout';
+import type { ViewLayout, PlatformSegment, StackLandmarks, StackZone } from './layout';
 import { fallbackPlatformSegments } from './layout';
 
 const TEXTURE_URL = `${import.meta.env.BASE_URL}capybara-texture.png`;
@@ -17,8 +17,8 @@ const STACK_RIDGE: { x: number; y: number }[] = [
 ];
 
 /** 화면 높이 대비 카피바라 스프라이트 크기 */
-const CAPY_SCREEN_HEIGHT = 0.31;
-const CAPY_MAX_WIDTH = 0.68;
+const CAPY_SCREEN_HEIGHT = 0.24;
+const CAPY_MAX_WIDTH = 0.52;
 
 function createCapyMaterial(texture: THREE.Texture) {
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -174,7 +174,6 @@ export class CapybaraScene {
 
     const ridgePts = this.ridgeWorldPoints();
     const screen = ridgePts.map((p) => this.toScreen(p));
-    const surfaceYs = screen.map((p) => p.y);
 
     const corners = [
       new THREE.Vector3(this.box.min.x, this.box.min.y, 0),
@@ -187,18 +186,30 @@ export class CapybaraScene {
     const bodyRight = Math.max(...xs);
     const pad = (bodyRight - bodyLeft) * 0.08;
 
-    const minRy = Math.min(...surfaceYs);
-    const maxRy = Math.max(...surfaceYs);
-    /** 능선 꼭대기에서 살짝 아래로 — 머리·목 위 가장자리에 걸치게 */
-    const nudge = Math.min(14, this.screenH * 0.018);
-    const proposed = minRy + nudge;
-    const firstLandingY = Math.min(proposed, maxRy - 8);
+    const headTopY = this.toScreen(
+      new THREE.Vector3(this.center.x, this.box.max.y, 0),
+    ).y;
+
+    const ridgeYs = screen.map((p) => p.y);
+    /** 능선 최상단(화면에서 위) = 목 융기 = 파인 윗경계 */
+    const dipCrestY = Math.min(...ridgeYs);
+    /** 양끝 어깨 능선 = 등 윗경계 */
+    const backTopY = (screen[0].y + screen[screen.length - 1].y) * 0.5;
+    /** 능선 중앙 최하 = 등 안장 바닥(파인 바닥) */
+    const saddleFloorY = Math.max(...ridgeYs);
+
+    const landmarks: StackLandmarks = {
+      headTopY: Math.min(headTopY, dipCrestY - 4),
+      dipCrestY,
+      backTopY: Math.min(backTopY, dipCrestY + 2),
+    };
 
     this.stackZone = {
       left: bodyLeft - pad,
       right: bodyRight + pad,
-      surfaceY: maxRy,
-      firstLandingY,
+      surfaceY: saddleFloorY,
+      firstLandingY: landmarks.dipCrestY,
+      landmarks,
     };
   }
 
